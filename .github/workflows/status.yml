@@ -1,12 +1,15 @@
 name: Monitor and publish staging status
 on:
   schedule:
-    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
+    # Each run starts the next one. GitHub can delay a schedule by hours, so
+    # this only restarts the chain if it ever breaks.
+    - cron: '3,33 * * * *'
   workflow_dispatch:
   push:
     branches: ['main']
     paths: ['monitor.mjs','monitor.test.mjs','site/index.html','site/status.js','site/status-state.mjs','site/styles.css','.github/workflows/status.yml']
 permissions:
+  actions: write
   contents: write
   pages: write
   id-token: write
@@ -16,7 +19,7 @@ concurrency:
 jobs:
   status:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 12
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -45,6 +48,13 @@ jobs:
           path: site
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Start the next check in five minutes
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 240
+          gh workflow run status.yml --repo "$GITHUB_REPOSITORY" --ref main
       - name: Signal outage to workflow notifications
         if: steps.check.outputs.healthy != 'true'
         run: exit 1
