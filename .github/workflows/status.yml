@@ -1,4 +1,4 @@
-name: Monitor and publish staging status
+name: Monitor staging status
 on:
   schedule:
     # A run lasts about five and a half hours. This keeps one queued behind it,
@@ -7,37 +7,16 @@ on:
   workflow_dispatch:
   push:
     branches: ['main']
-    paths: ['loop.mjs','monitor.mjs','monitor.test.mjs','site/index.html','site/status.js','site/status-state.mjs','site/styles.css','.github/workflows/status.yml']
+    paths: ['loop.mjs','monitor.mjs','monitor.test.mjs','.github/workflows/status.yml']
 permissions:
   actions: write
   contents: write
   issues: write
-  pages: write
-  id-token: write
 concurrency:
   group: staging-status
   cancel-in-progress: false
 jobs:
-  publish:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
   monitor:
-    # Publishing the page failing must never stop the checks.
-    if: always()
-    needs: publish
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     steps:
