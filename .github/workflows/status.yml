@@ -1,28 +1,45 @@
 name: Monitor and publish staging status
 on:
   schedule:
-    # Each run starts the next one. GitHub can delay a schedule by hours, so
-    # this only restarts the chain if it ever breaks.
+    # A run lasts about five and a half hours. This keeps one queued behind it,
+    # and restarts monitoring if the running one ever dies.
     - cron: '3,33 * * * *'
   workflow_dispatch:
   push:
     branches: ['main']
-    paths: ['monitor.mjs','monitor.test.mjs','site/index.html','site/status.js','site/status-state.mjs','site/styles.css','.github/workflows/status.yml']
+    paths: ['loop.mjs','monitor.mjs','monitor.test.mjs','site/index.html','site/status.js','site/status-state.mjs','site/styles.css','.github/workflows/status.yml']
 permissions:
   actions: write
   contents: write
+  issues: write
   pages: write
   id-token: write
 concurrency:
   group: staging-status
   cancel-in-progress: false
 jobs:
-  status:
+  publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+  monitor:
+    # Publishing the page failing must never stop the checks.
+    if: always()
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,30 +48,10 @@ jobs:
         with:
           node-version: '22.23.4'
       - run: node --test monitor.test.mjs
-      - id: check
-        run: node monitor.mjs
-      - name: Save observed history
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add site/status.json
-          if ! git diff --cached --quiet; then
-            git commit -m 'Record staging availability observation'
-            git push
-          fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@v4
-      - name: Start the next check in five minutes
-        if: always()
+      - name: Check every five minutes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sleep 240
-          gh workflow run status.yml --repo "$GITHUB_REPOSITORY" --ref main
-      - name: Signal outage to workflow notifications
-        if: steps.check.outputs.healthy != 'true'
-        run: exit 1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          node loop.mjs

@@ -1,0 +1,33 @@
+name: Alert if status checks stop
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+  issues: write
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Restart the checks and open an issue if they stopped
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='Status checks have stopped'
+          age=$(node -e "const c=require('./site/status.json').checks.at(-1);console.log(Math.round((Date.now()-Date.parse(c.checkedAt))/60000))")
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // ""')
+          echo "Last check $age minutes ago"
+          if [ "$age" -gt 20 ]; then
+            gh workflow run status.yml --ref main || true
+            if [ -z "$open" ]; then
+              gh issue create --title "$title" --body "The last check was $age minutes ago, so the status page cannot confirm whether the service is up. The checks were asked to restart."
+            fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "Checks resumed. The last one was $age minutes ago."
+          fi

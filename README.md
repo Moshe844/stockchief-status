@@ -8,4 +8,6 @@ The displayed percentage measures observed checks. Scheduling delays are shown a
 
 Run `node --test monitor.test.mjs` to verify healthy, outage, timeout, malformed-response and stale-monitoring behavior. Run `node monitor.mjs` to save one real observation. There are no package dependencies or paid service subscriptions.
 
-Each run starts the next one after about four minutes, because GitHub can delay scheduled runs by hours. The schedule only restarts the chain if it breaks. If checks stop, the page shows an alert with the age of the last check.
+One long-running job (`loop.mjs`) takes a check every five minutes for about five and a half hours, then the next run takes over. GitHub can delay schedules by hours and a dispatch can fail, so the checks do not depend on either: the schedule keeps a run queued behind the current one, and a failed step is logged and the next tick carries on. The page reads the checks straight from the repository, so it does not have to be republished for each one.
+
+Alerts are GitHub issues, which email the repository owner: one after two failed checks in a row, closed on recovery, and one from `watchdog.yml` if checks stop for more than 20 minutes. If checks stop, the page also shows an alert with the age of the last check.
