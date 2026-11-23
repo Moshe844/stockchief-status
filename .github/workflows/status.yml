@@ -1,4 +1,4 @@
-name: Monitor staging status
+name: Monitor production status
 on:
   schedule:
     # A run lasts about five and a half hours. This keeps one queued behind it,
@@ -13,7 +13,7 @@ permissions:
   contents: write
   issues: write
 concurrency:
-  group: staging-status
+  group: production-status
   cancel-in-progress: false
 jobs:
   monitor:
@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: '22.23.4'
       - run: node --test monitor.test.mjs
-      - name: Check every five minutes
+      - name: Check production every minute
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
