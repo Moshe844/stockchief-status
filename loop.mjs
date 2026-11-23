@@ -5,19 +5,19 @@
 import fs from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
-import {probe,append} from './monitor.mjs';
+import {probe,append,HISTORY_FILE} from './monitor.mjs';
 
-export const EVERY_MS=5*60000;
+export const EVERY_MS=60000;
 export const RUN_MS=340*60000;
 export const DOWN_AFTER=2;
-const DOWN_TITLE='StockChief staging is down';
+const DOWN_TITLE='StockChief production is down';
 
 const run=(cmd,args)=>execFileSync(cmd,args,{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:60000});
 const quietly=(what,fn)=>{try{return fn();}catch(error){console.error(what+' failed: '+String(error.stderr||error.message).slice(0,300));return null;}};
 
 // Another run can only add newer observations, so retry on top of what is there.
 function saveHistory(attempts=5){
- quietly('commit',()=>{run('git',['add','site/status.json']);run('git',['commit','-m','Record staging availability observation']);});
+ quietly('commit',()=>{run('git',['add',HISTORY_FILE]);run('git',['commit','-m','Record production availability observation']);});
  for(let attempt=1;attempt<=attempts;attempt++){
   if(quietly('push',()=>{run('git',['pull','--rebase','--autostash','origin','main']);run('git',['push','origin','HEAD:main']);return true;}))return true;
   execFileSync('sleep',[String(attempt*5)]);
@@ -34,15 +34,15 @@ function syncOutageIssue(checks,last){
  const found=quietly('issue lookup',()=>run('gh',['issue','list','--state','open','--search','in:title "'+DOWN_TITLE+'"','--json','number','--jq','.[0].number // ""']).trim());
  if(found===null)return;
  const action=outageAction(checks,Boolean(found));
- if(action==='open')quietly('issue open',()=>run('gh',['issue','create','--title',DOWN_TITLE,'--body','The last '+failedInARow(checks)+' checks failed. Latest: HTTP '+last.httpStatus+' at '+last.checkedAt+'.']));
+ if(action==='open')quietly('issue open',()=>run('gh',['issue','create','--title',DOWN_TITLE,'--body','The last '+failedInARow(checks)+' checks failed. Latest: HTTP '+last.httpStatus+' at '+last.checkedAt+'. Components needing attention: '+(last.components||[]).filter(c=>!c.ok).map(c=>c.name).join(', ')+'.']));
  if(action==='close')quietly('issue close',()=>run('gh',['issue','close',found,'--comment','Recovered at '+last.checkedAt+'.']));
 }
 
 async function tick(){
  quietly('pull',()=>run('git',['pull','--rebase','--autostash','origin','main']));
- let prior;try{prior=JSON.parse(await fs.readFile('site/status.json','utf8'));}catch{prior={checks:[]};}
+ let prior;try{prior=JSON.parse(await fs.readFile(HISTORY_FILE,'utf8'));}catch{prior={checks:[]};}
  const check=await probe(),next=append(prior,check);
- await fs.writeFile('site/status.json',JSON.stringify(next)+'\n');
+ await fs.writeFile(HISTORY_FILE,JSON.stringify(next)+'\n');
  console.log(JSON.stringify(check));
  saveHistory();
  syncOutageIssue(next.checks,check);

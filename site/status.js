@@ -1,6 +1,15 @@
 import {state} from './status-state.mjs';
 // Checks land in the repository every five minutes; the published copy only updates when the page is published.
-const sources=['https://raw.githubusercontent.com/Moshe844/stockchief-status/main/site/status.json','./status.json'];
+const sources=['https://raw.githubusercontent.com/Moshe844/stockchief-status/main/site/production-status.json','./production-status.json'];
 async function read(url){const response=await fetch(url+'?at='+Date.now(),{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error();return response.json();}
-async function refresh(){let data={checks:[]};for(const source of sources){try{const found=await read(source);if((found.checks?.at(-1)?.checkedAt||'')>(data.checks.at(-1)?.checkedAt||''))data=found;}catch{}}const view=state(data),badge=document.querySelector('[data-status]');badge.textContent=view.label;badge.dataset.tone=view.tone;const alert=document.querySelector('[data-alert]');alert.textContent=view.alert||'';alert.hidden=!view.alert;document.querySelector('[data-checked]').textContent=view.last?new Date(view.last.checkedAt).toLocaleString():'Waiting for the first check';document.querySelector('[data-latency]').textContent=view.last?view.last.latencyMs+' ms':'—';document.querySelector('[data-observed]').textContent=view.observedPercent===null?'No observations yet':view.observedPercent.toFixed(2)+'% across '+view.samples.toLocaleString()+' observed checks';}
+async function refresh(){
+ let data={checks:[]};for(const source of sources){try{const found=await read(source);if(found.version===2&&found.service==='StockChief production'&&found.origin==='https://app.stockchiefhq.com'&&(found.checks?.at(-1)?.checkedAt||'')>(data.checks.at(-1)?.checkedAt||''))data=found;}catch{}}
+ const view=state(data),badge=document.querySelector('[data-status]');badge.textContent=view.label;badge.dataset.tone=view.tone;
+ const alert=document.querySelector('[data-alert]');alert.textContent=view.alert||'';alert.hidden=!view.alert;
+ const components=document.querySelector('[data-components]');components.replaceChildren();
+ for(const component of view.last?.components||[]){const line=document.createElement('li');line.textContent=component.name+': '+(view.tone==='unknown'?'Latest check is out of date':component.ok?'Responding':'Needs attention');components.append(line);}
+ document.querySelector('[data-checked]').textContent=view.last?new Date(view.last.checkedAt).toLocaleString():'Waiting for the first check';
+ document.querySelector('[data-latency]').textContent=view.last?view.last.latencyMs+' ms':'—';
+ document.querySelector('[data-observed]').textContent=view.observedPercent===null?'No observations yet':view.observedPercent.toFixed(2)+'% across '+view.samples.toLocaleString()+' observed checks';
+}
 await refresh();setInterval(refresh,60000);
