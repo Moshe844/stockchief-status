@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches: [main]
-    paths: ['monitor.mjs','loop.mjs','monitor.test.mjs','site/status-state.mjs','.github/workflows/test.yml']
+    paths: ['monitor.mjs','loop.mjs','*.test.mjs','site/*.mjs','site/status.js','.github/workflows/test.yml']
 permissions:
   contents: read
 jobs:
@@ -15,4 +15,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.23.4'
-      - run: node --test monitor.test.mjs
+      - run: node --test *.test.mjs

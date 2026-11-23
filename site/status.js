@@ -1,9 +1,7 @@
 import {state} from './status-state.mjs';
-// Checks land in the repository every five minutes; the published copy only updates when the page is published.
-const sources=['https://raw.githubusercontent.com/Moshe844/stockchief-status/main/site/production-status.json','./production-status.json'];
-async function read(url){const response=await fetch(url+'?at='+Date.now(),{cache:'no-store',credentials:'omit'});if(!response.ok)throw Error();return response.json();}
-async function refresh(){
- let data={checks:[]};for(const source of sources){try{const found=await read(source);if(found.version===2&&found.service==='StockChief production'&&found.origin==='https://app.stockchiefhq.com'&&(found.checks?.at(-1)?.checkedAt||'')>(data.checks.at(-1)?.checkedAt||''))data=found;}catch{}}
+import {readStatus} from './status-client.mjs';
+let data={checks:[]},loading=false;
+function render(){
  const view=state(data),badge=document.querySelector('[data-status]');badge.textContent=view.label;badge.dataset.tone=view.tone;
  const alert=document.querySelector('[data-alert]');alert.textContent=view.alert||'';alert.hidden=!view.alert;
  const components=document.querySelector('[data-components]');components.replaceChildren();
@@ -12,4 +10,11 @@ async function refresh(){
  document.querySelector('[data-latency]').textContent=view.last?view.last.latencyMs+' ms':'—';
  document.querySelector('[data-observed]').textContent=view.observedPercent===null?'No observations yet':view.observedPercent.toFixed(2)+'% across '+view.samples.toLocaleString()+' observed checks';
 }
-await refresh();setInterval(refresh,60000);
+async function refresh(){
+ if(loading)return;loading=true;
+ try{const found=await readStatus();if(found&&Date.parse(found.checks.at(-1).checkedAt)>Date.parse(data.checks.at(-1)?.checkedAt||'1970-01-01'))data=found;}
+ finally{loading=false;render();}
+}
+render();void refresh();
+// Recompute freshness even while the next request is still waiting.
+setInterval(()=>{render();void refresh();},60000);
